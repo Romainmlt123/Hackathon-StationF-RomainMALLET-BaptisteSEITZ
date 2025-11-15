@@ -96,14 +96,46 @@ python -m app.main --transport twilio --port 8765
 
 ### Avec ngrok (pour tester avec Twilio)
 
-1. Installez [ngrok](https://ngrok.com/)
-2. Ajoutez `NGROK_AUTH_TOKEN` dans `.env`
-3. Lancez `./start.sh`
-4. Copiez l'URL ngrok affichée (ex: `https://abc123.ngrok.io`)
-5. Dans Twilio Console, configurez le webhook :
+1. **Installez [ngrok](https://ngrok.com/)**
+   ```bash
+   # Ubuntu/Debian
+   curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
+   echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
+   sudo apt update && sudo apt install ngrok
+   
+   # Ou téléchargez depuis https://ngrok.com/download
    ```
-   https://abc123.ngrok.io/ws/{stream_sid}
+
+2. **Authentifiez-vous**
+   ```bash
+   ngrok config add-authtoken VOTRE_TOKEN_NGROK
    ```
+
+3. **Lancez le serveur**
+   ```bash
+   ./start.sh
+   ```
+
+4. **Dans un autre terminal, lancez ngrok**
+   ```bash
+   ngrok http 8765
+   ```
+   
+   Copiez l'URL affichée (ex: `https://abc123.ngrok-free.app`)
+
+5. **Configurez Twilio Console**
+   - Allez sur https://console.twilio.com/
+   - **Phone Numbers → Manage → Active Numbers**
+   - Cliquez sur votre numéro
+   - Section **Voice Configuration** :
+     - **A CALL COMES IN** → Webhook
+     - URL : `https://abc123.ngrok-free.app/incoming-call`
+     - Method : **HTTP POST**
+   - Cliquez **Save**
+
+6. **Appelez votre numéro Twilio** 📞
+   - L'agent IA va répondre automatiquement !
+   - Vous pouvez converser en temps réel
 
 ### Avec Docker
 
@@ -169,12 +201,37 @@ llm = MistralLLMService(
 python -m app.main --transport daily --room-url <DAILY_ROOM_URL>
 ```
 
-### Tester avec Twilio Inbound Call
+### Tester avec Twilio (appel réel)
 
-1. Configurez votre numéro Twilio
-2. Webhook Twilio → URL ngrok
-3. Appelez le numéro Twilio
-4. L'agent vocal répond automatiquement !
+1. **Achetez un numéro Twilio** (si pas déjà fait)
+   - https://console.twilio.com/us1/develop/phone-numbers/manage/search
+
+2. **Lancez le serveur + ngrok**
+   ```bash
+   # Terminal 1
+   ./start.sh
+   
+   # Terminal 2
+   ngrok http 8765
+   ```
+
+3. **Configurez le webhook Twilio**
+   - URL : `https://votre-url-ngrok.ngrok-free.app/incoming-call`
+   - Method : POST
+
+4. **Appelez votre numéro Twilio** 📱
+   - L'agent IA répond en français
+   - Conversation en temps réel < 1 seconde de latence
+   
+5. **Vérifiez les logs**
+   ```bash
+   # Vous devriez voir :
+   # 📞 Incoming call: +33612345678 → +33987654321
+   # 🔌 WebSocket connected: CA1234567890abcdef
+   # 🎙️ [STT] Bonjour, comment allez-vous ?
+   # 🤖 [LLM] Je vais très bien, merci ! Comment puis-je vous aider ?
+   # 🔊 [TTS] Streaming audio...
+   ```
 
 ---
 

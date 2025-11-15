@@ -21,5 +21,5 @@ COPY . /app
 # Expose port
 EXPOSE 8765
 
-# Start the bot with Twilio transport by default
-CMD ["python", "-m", "app.main", "--transport", "twilio", "--port", "8765"]
+# Start the FastAPI server (Twilio webhook + WebSocket)
+CMD ["python", "app/server.py"]

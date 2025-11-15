@@ -31,11 +31,13 @@ if command -v ngrok >/dev/null 2>&1 && [ -n "${NGROK_AUTH_TOKEN-}" ]; then
   echo "✅ Ngrok running. Get your public URL from: http://localhost:4040"
 fi
 
-# Start the Pipecat bot
+# Start the FastAPI server (includes Twilio webhook + WebSocket)
 echo "🚀 Starting Realtime Voice Agent..."
-echo "   Transport: $TRANSPORT"
 echo "   Host: $HOST"
 echo "   Port: $PORT"
 echo ""
+echo "📋 Configure Twilio webhook to point to:"
+echo "   POST http://your-public-url/incoming-call"
+echo ""
 
-exec python -m app.main --transport "$TRANSPORT" --port "$PORT" --host "$HOST"
+exec python app/server.py
