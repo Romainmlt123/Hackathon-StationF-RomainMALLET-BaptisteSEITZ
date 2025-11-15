@@ -4,18 +4,22 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Install OS-level deps for audio processing if needed
+# Install system dependencies for audio processing
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     ffmpeg \
+    libsndfile1 \
  && rm -rf /var/lib/apt/lists/*
 
 # Copy project files
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
 COPY . /app
 
-# Install Python deps
-RUN pip install --no-cache-dir -r requirements.txt
+# Expose port
+EXPOSE 8765
 
-EXPOSE 8000
-
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Start the bot with Twilio transport by default
+CMD ["python", "-m", "app.main", "--transport", "twilio", "--port", "8765"]

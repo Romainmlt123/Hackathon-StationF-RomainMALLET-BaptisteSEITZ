@@ -1,9 +1,17 @@
-fastapi>=0.95
-uvicorn[standard]>=0.21
-loguru>=0.7.0
-pydantic>=1.10
-python-dotenv>=1.0
-requests>=2.28
+# ========================================
+# HACKATHON STATION F - REALTIME VOICE AGENT
+# Python dependencies
+# ========================================
 
-# Optional but useful during development
-aiohttp>=3.8
+# Core Pipecat framework
+pipecat-ai[daily,deepgram,elevenlabs,mistral,silero]
+
+# Additional dependencies
+python-dotenv>=1.0
+loguru>=0.7.0
+pydantic>=2.0
+pydantic-settings>=2.0
+
+# Web framework (if using custom FastAPI endpoints)
+fastapi>=0.110
+uvicorn[standard]>=0.27

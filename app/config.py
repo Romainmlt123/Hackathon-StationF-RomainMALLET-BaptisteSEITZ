@@ -1,33 +1,37 @@
-"""Configuration for the Realtime Voice Agent using pydantic BaseSettings.
+"""Configuration centralisée pour l'agent vocal temps réel.
 
-Put secrets in a `.env` file at the project root or provide them via
-environment variables. This centralizes keys and defaults for the
-pipeline and server.
+Utilise pydantic BaseSettings pour charger automatiquement depuis .env
 """
-from pydantic import BaseSettings, Field
+from pydantic_settings import BaseSettings
 from typing import Optional
 
 
 class Config(BaseSettings):
-    # API keys
-    MISTRAL_API_KEY: Optional[str] = Field(None, env="MISTRAL_API_KEY")
-    MISTRAL_API_URL: Optional[str] = Field(None, env="MISTRAL_API_URL")
+    """Configuration avec chargement automatique depuis .env"""
 
-    ELEVENLABS_API_KEY: Optional[str] = Field(None, env="ELEVENLABS_API_KEY")
-    ELEVENLABS_VOICE_ID_DEFAULT: str = Field("alloy", env="ELEVENLABS_VOICE_ID_DEFAULT")
-    ELEVENLABS_API_URL: Optional[str] = Field(None, env="ELEVENLABS_API_URL")
+    # ========== API Keys ==========
+    MISTRAL_API_KEY: str
+    ELEVENLABS_API_KEY: str
+    ELEVENLABS_VOICE_ID: str = "alloy"  # ID de voix par défaut
 
-    # Server
-    HOST: str = Field("0.0.0.0", env="HOST")
-    PORT: int = Field(8000, env="PORT")
+    # ========== Server Configuration ==========
+    HOST: str = "0.0.0.0"
+    PORT: int = 8765
 
-    # Behaviour
-    SYSTEM_PROMPT: Optional[str] = Field("You are a helpful voice assistant.", env="SYSTEM_PROMPT")
-    LOG_LEVEL: str = Field("INFO", env="LOG_LEVEL")
+    # ========== Bot Behavior ==========
+    SYSTEM_PROMPT: Optional[str] = None
+    GREETING_PROMPT: Optional[str] = None
+    LOG_LEVEL: str = "INFO"
+
+    # ========== Twilio (optional) ==========
+    TWILIO_ACCOUNT_SID: Optional[str] = None
+    TWILIO_AUTH_TOKEN: Optional[str] = None
 
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+        case_sensitive = True
 
 
+# Singleton instance
 config = Config()
