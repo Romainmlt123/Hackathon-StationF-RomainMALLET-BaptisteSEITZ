@@ -66,37 +66,99 @@ async def websocket_endpoint(websocket: WebSocket, stream_sid: str):
     logger.info(f"🔌 WebSocket connected: {stream_sid}")
     
     try:
-        # Import the bot runner from our main module
-        from app.main import run_bot
-        from pipecat.runner.types import RunnerArguments
-        from pipecat.transports.websocket.fastapi import FastAPIWebsocketTransport
+        # Import necessary Pipecat components
         from pipecat.audio.vad.silero import SileroVADAnalyzer
         from pipecat.audio.vad.vad_analyzer import VADParams
-        from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
-        from pipecat.audio.turn.smart_turn.base_smart_turn import SmartTurnParams
+        from pipecat.frames.frames import LLMRunFrame
+        from pipecat.pipeline.pipeline import Pipeline
+        from pipecat.pipeline.runner import PipelineRunner
+        from pipecat.pipeline.task import PipelineParams, PipelineTask
+        from pipecat.processors.aggregators.llm_context import LLMContext
+        from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
+        from pipecat.services.elevenlabs.stt import ElevenLabsRealtimeSTTService
+        from pipecat.services.elevenlabs.tts import ElevenLabsTTSService
+        from pipecat.services.mistral.llm import MistralLLMService
+        from pipecat.transports.websocket.fastapi import FastAPIWebsocketTransport, FastAPIWebsocketParams
+        
+        # Create transport params with VAD
+        transport_params = FastAPIWebsocketParams(
+            audio_in_enabled=True,
+            audio_out_enabled=True,
+            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.2)),
+        )
         
         # Create transport for this WebSocket connection
         transport = FastAPIWebsocketTransport(
             websocket=websocket,
-            params={
-                "audio_in_enabled": True,
-                "audio_out_enabled": True,
-                "vad_analyzer": SileroVADAnalyzer(params=VADParams(stop_secs=0.2)),
-                "turn_analyzer": LocalSmartTurnAnalyzerV3(params=SmartTurnParams()),
-            }
+            params=transport_params,
         )
         
-        # Create runner arguments
-        runner_args = RunnerArguments(
-            handle_sigint=False,
-            pipeline_idle_timeout_secs=300,  # 5 minutes
+        # Initialize services
+        stt = ElevenLabsRealtimeSTTService(
+            api_key=os.getenv("ELEVENLABS_API_KEY", ""),
+            language="fr",
         )
         
-        # Run the bot for this call
-        await run_bot(transport, runner_args)
+        tts = ElevenLabsTTSService(
+            api_key=os.getenv("ELEVENLABS_API_KEY", ""),
+            voice_id=os.getenv("ELEVENLABS_VOICE_ID", ""),
+        )
+        
+        llm = MistralLLMService(
+            api_key=os.getenv("MISTRAL_API_KEY", ""),
+            model="mistral-small-latest",
+        )
+        
+        # System prompt
+        system_prompt = os.getenv(
+            "SYSTEM_PROMPT",
+            "Tu es un assistant vocal IA intelligent et professionnel."
+        )
+        
+        messages = [{"role": "system", "content": system_prompt}]
+        context = LLMContext(messages)
+        context_aggregator = LLMContextAggregatorPair(context)
+        
+        # Build pipeline
+        pipeline = Pipeline([
+            transport.input(),
+            stt,
+            context_aggregator.user(),
+            llm,
+            tts,
+            transport.output(),
+            context_aggregator.assistant(),
+        ])
+        
+        # Create task
+        task = PipelineTask(
+            pipeline,
+            params=PipelineParams(
+                enable_metrics=True,
+                enable_usage_metrics=True,
+            ),
+        )
+        
+        # Event handlers
+        @transport.event_handler("on_client_connected")
+        async def on_client_connected(transport, client):
+            logger.info(f"📞 Client connected to pipeline")
+            greeting = os.getenv("GREETING_PROMPT", "Salue l'appelant brievement.")
+            messages.append({"role": "system", "content": greeting})
+            await task.queue_frames([LLMRunFrame()])
+        
+        @transport.event_handler("on_client_disconnected")
+        async def on_client_disconnected(transport, client):
+            logger.info(f"📴 Client disconnected from pipeline")
+            await task.cancel()
+        
+        # Run the pipeline
+        runner = PipelineRunner(handle_sigint=False)
+        await runner.run(task)
         
     except Exception as e:
         logger.exception(f"❌ Error in WebSocket handler: {e}")
+        raise
     finally:
         logger.info(f"📴 WebSocket disconnected: {stream_sid}")
 
