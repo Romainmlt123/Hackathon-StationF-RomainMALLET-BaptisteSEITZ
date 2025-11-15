@@ -20,261 +20,126 @@ Chaque appel = une session indépendante avec contexte conversationnel.
 
 ## 🏗️ Architecture
 
-```
-Appel Twilio → WebSocket
-    ↓
-[ElevenLabs STT] → Transcription
-    ↓
-[Mistral LLM] → Génération réponse
-    ↓
-[ElevenLabs TTS] → Synthèse vocale
-    ↓
-Audio → Appelant
-```
+# Hackathon — Voice Agent (ElevenLabs Agent + Backend + Frontend)
 
-**Technologies :**
-- **Pipecat** : Framework de pipeline audio temps réel
-- **FastAPI** : Transport WebSocket pour Twilio
-- **Mistral API** : LLM français performant
-- **ElevenLabs** : STT + TTS ultra-réaliste
+Ce dépôt contient une version simplifiée du projet de l'agent vocal :
 
----
+ - Un backend FastAPI léger qui reçoit les webhooks d'ElevenLabs (agent)
+ - Un frontend (dashboard) dans `frontend/lovable-ai-dashboard` pour afficher les appels
+ - Le schéma SQL pour Supabase dans `backend/schema.sql`
 
-## 📦 Installation
+Le but ici est d'utiliser l'agent ElevenLabs (conversational AI) pour gérer
+STT/LLM/TTS, et d'enregistrer les conversations via un webhook sur le
+backend. Plus besoin de Pipecat pour cette architecture.
 
-### 1. Cloner le dépôt
+## Quickstart (local)
 
-```bash
-git clone https://github.com/Romainmlt123/Hackathon-StationF-RomainMALLET-BaptisteSEITZ.git
-cd Hackathon-StationF-RomainMALLET-BaptisteSEITZ
-git checkout Romain
-```
+Prérequis : Python 3.11+, Node.js (pour le frontend), ngrok (ou tunnel public)
 
-### 2. Créer un environnement virtuel
+1) Créez et activez un virtualenv
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
-# .venv\Scripts\activate   # Windows
+source .venv/bin/activate
 ```
 
-### 3. Installer les dépendances
+2) Installez les dépendances du backend
 
 ```bash
-pip install -r requirements.txt
+pip install -r backend/requirements.txt
 ```
 
-### 4. Configurer les clés API
+3) Configurez les variables d'environnement
 
 ```bash
 cp .env.template .env
+# Éditez .env et remplissez au minimum :
+# ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID, API_KEY
 ```
 
-Éditez `.env` et ajoutez vos clés :
-
-```env
-MISTRAL_API_KEY=your_mistral_key
-ELEVENLABS_API_KEY=your_elevenlabs_key
-ELEVENLABS_VOICE_ID=your_voice_id
-```
-
----
-
-## 🚀 Lancement
-
-### Mode local (développement)
+4) Démarrez le backend
 
 ```bash
-./start.sh
+python backend/simple_server.py
 ```
 
-Ou directement avec Python :
+Vous verrez le backend démarrer sur `http://localhost:8765`.
+
+5) Exposez le backend publiquement (ngrok)
 
 ```bash
-python -m app.main --transport twilio --port 8765
+ # Authentifiez ngrok une seule fois (remplacez TOKEN)
+ ngrok config add-authtoken YOUR_NGROK_TOKEN
+
+ # Lancez le tunnel
+ ngrok http 8765
 ```
 
-### Avec ngrok (pour tester avec Twilio)
+Copiez l'URL HTTPS fournie par ngrok (ex: `https://abc123.ngrok-free.dev`).
 
-1. **Installez [ngrok](https://ngrok.com/)**
-   ```bash
-   # Ubuntu/Debian
-   curl -s https://ngrok-agent.s3.amazonaws.com/ngrok.asc | sudo tee /etc/apt/trusted.gpg.d/ngrok.asc >/dev/null
-   echo "deb https://ngrok-agent.s3.amazonaws.com buster main" | sudo tee /etc/apt/sources.list.d/ngrok.list
-   sudo apt update && sudo apt install ngrok
-   
-   # Ou téléchargez depuis https://ngrok.com/download
-   ```
+6) Configurez l'agent ElevenLabs
 
-2. **Authentifiez-vous**
-   ```bash
-   ngrok config add-authtoken VOTRE_TOKEN_NGROK
-   ```
+ - Dans ElevenLabs Platform → Agents → Outils (Add webhook)
+ - Méthode : POST
+ - URL : `https://<YOUR_NGROK_URL>/webhook/elevenlabs`
+ - Headers :
+   - `X-API-Key: <API_KEY>`  (valeur = `API_KEY` dans votre `.env`)
 
-3. **Lancez le serveur**
-   ```bash
-   ./start.sh
-   ```
+ElevenLabs enverra les événements de conversation à ce webhook. Le
+backend affichera les logs et (optionnellement) vous pourrez enregistrer
+les appels dans Supabase.
 
-4. **Dans un autre terminal, lancez ngrok**
-   ```bash
-   ngrok http 8765
-   ```
-   
-   Copiez l'URL affichée (ex: `https://abc123.ngrok-free.app`)
+## Frontend (dashboard)
 
-5. **Configurez Twilio Console**
-   - Allez sur https://console.twilio.com/
-   - **Phone Numbers → Manage → Active Numbers**
-   - Cliquez sur votre numéro
-   - Section **Voice Configuration** :
-     - **A CALL COMES IN** → Webhook
-     - URL : `https://abc123.ngrok-free.app/incoming-call`
-     - Method : **HTTP POST**
-   - Cliquez **Save**
+Le frontend est situé dans `frontend/lovable-ai-dashboard`.
 
-6. **Appelez votre numéro Twilio** 📞
-   - L'agent IA va répondre automatiquement !
-   - Vous pouvez converser en temps réel
-
-### Avec Docker
+1) Installez Node.js (v16+ / 18+ recommandé)
+2) Installez les dépendances et lancez le dev server
 
 ```bash
-docker build -t voice-agent .
-docker run -p 8765:8765 --env-file .env voice-agent
+cd frontend/lovable-ai-dashboard
+npm install
+npm run dev
 ```
 
----
+Par défaut le frontend attendra une API à `http://localhost:8765` —
+configurez `VITE_API_URL` et `VITE_API_KEY` si nécessaire (voir le dossier
+frontend pour `.env` ou `vite` instructions).
 
-## 📁 Structure du projet
+## Supabase
 
-```
-Hackathon-StationF-RomainMALLET-BaptisteSEITZ/
-├── app/
-│   ├── __init__.py
-│   ├── main.py          # Point d'entrée principal (pipeline Pipecat)
-│   └── config.py        # Configuration centralisée (pydantic)
-├── .env.template        # Template de configuration
-├── requirements.txt     # Dépendances Python
-├── start.sh             # Script de démarrage
-├── Dockerfile           # Image Docker
-└── README.md            # Ce fichier
-```
+Le schéma SQL est dans `backend/schema.sql`. Exécutez-le dans l'éditeur
+SQL de votre projet Supabase pour créer la table `call_logs`.
 
----
+## Tester manuellement le webhook
 
-## 🔧 Configuration avancée
-
-### Personnaliser le prompt système
-
-Éditez `SYSTEM_PROMPT` dans `.env` :
-
-```env
-SYSTEM_PROMPT=Tu es Marie, assistante virtuelle de l'entreprise XYZ. Tu dois...
-```
-
-### Changer la voix ElevenLabs
-
-1. Allez sur [ElevenLabs Voice Lab](https://elevenlabs.io/app/voice-lab)
-2. Choisissez ou clonez une voix
-3. Copiez le `voice_id`
-4. Mettez-le dans `ELEVENLABS_VOICE_ID`
-
-### Utiliser un autre LLM
-
-Modifiez `app/main.py` ligne 75 :
-
-```python
-llm = MistralLLMService(
-    api_key=os.getenv("MISTRAL_API_KEY"),
-    model="mistral-large-latest",  # ou mistral-medium-latest
-)
-```
-
----
-
-## 🧪 Tests
-
-### Tester localement sans Twilio
+Vous pouvez tester la réception côté backend avec curl :
 
 ```bash
-python -m app.main --transport daily --room-url <DAILY_ROOM_URL>
+curl -X POST https://<YOUR_NGROK_URL>/webhook/elevenlabs \
+  -H "X-API-Key: <API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{"conversation_id":"test","agent_id":"agent-1","status":"completed","transcript":[]}'
 ```
 
-### Tester avec Twilio (appel réel)
+Le backend répondra par `{ "status": "received" }` et écrira le log.
 
-1. **Achetez un numéro Twilio** (si pas déjà fait)
-   - https://console.twilio.com/us1/develop/phone-numbers/manage/search
+## Rendre le dépôt propre
 
-2. **Lancez le serveur + ngrok**
-   ```bash
-   # Terminal 1
-   ./start.sh
-   
-   # Terminal 2
-   ngrok http 8765
-   ```
+Ce README remplace la documentation dispersée. Si vous voulez, je peux
+supprimer les anciens fichiers de documentation (`backend/README.md`,
+`SETUP_BACKEND.md`, `BACKEND_SUMMARY.md`) pour ne garder qu'un seul
+documentation source — confirmez si vous voulez que je les supprime.
 
-3. **Configurez le webhook Twilio**
-   - URL : `https://votre-url-ngrok.ngrok-free.app/incoming-call`
-   - Method : POST
+## Points importants
 
-4. **Appelez votre numéro Twilio** 📱
-   - L'agent IA répond en français
-   - Conversation en temps réel < 1 seconde de latence
-   
-5. **Vérifiez les logs**
-   ```bash
-   # Vous devriez voir :
-   # 📞 Incoming call: +33612345678 → +33987654321
-   # 🔌 WebSocket connected: CA1234567890abcdef
-   # 🎙️ [STT] Bonjour, comment allez-vous ?
-   # 🤖 [LLM] Je vais très bien, merci ! Comment puis-je vous aider ?
-   # 🔊 [TTS] Streaming audio...
-   ```
+ - Clé API : `X-API-Key` est utilisée pour authentifier les webhooks. Mettez
+   une valeur forte dans `.env` (API_KEY).
+ - Si vous préférez utiliser Twilio pour recevoir des appels, on peut
+   connecter Twilio au webhook ElevenLabs (ou directement au backend) —
+   dites-moi et j'adapte la doc.
 
 ---
 
-## 📊 Logs et debug
-
-Les logs sont gérés par `loguru`. Niveau configurable via `.env` :
-
-```env
-LOG_LEVEL=DEBUG  # DEBUG, INFO, WARNING, ERROR
-```
-
----
-
-## 🚧 Roadmap / TODO
-
-- [ ] Ajouter support multi-langue (détection automatique)
-- [ ] Intégrer base de données (historique des appels)
-- [ ] Dashboard admin (Next.js)
-- [ ] Déploiement Cloud Run / Render
-- [ ] Webhooks pour notifier fin d'appel
-- [ ] Support fonction calling (réservation, prise de RDV)
-
----
-
-## 🤝 Contribution
-
-Projet réalisé dans le cadre du **Pioneers AI Lab Hackathon @ Station F**.
-
-**Équipe :**
-- Romain MALLET
-- Baptiste SEITZ
-
----
-
-## 📄 Licence
-
-MIT License
-
----
-
-## 📚 Ressources
-
-- [Documentation Pipecat](https://docs.pipecat.ai/)
-- [Mistral API](https://docs.mistral.ai/)
-- [ElevenLabs API](https://docs.elevenlabs.io/)
-- [Twilio Docs](https://www.twilio.com/docs)
+Si vous voulez que j'efface les autres fichiers docs maintenant, dites
+"Supprime les anciens docs" et je m'en occupe.

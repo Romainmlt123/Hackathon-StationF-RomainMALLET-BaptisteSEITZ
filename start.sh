@@ -70,4 +70,4 @@ echo "📋 Configure Twilio webhook to point to:"
 echo "   POST http://your-public-url/incoming-call"
 echo ""
 
-exec python app/server.py
+exec python backend/server.py
