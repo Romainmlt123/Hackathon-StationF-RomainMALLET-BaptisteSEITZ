@@ -61,13 +61,13 @@ if command -v ngrok >/dev/null 2>&1 && [ -n "${NGROK_AUTH_TOKEN-}" ]; then
   echo "✅ Ngrok running. Get your public URL from: http://localhost:4040"
 fi
 
-# Start the FastAPI server (includes Twilio webhook + WebSocket)
-echo "🚀 Starting Realtime Voice Agent..."
+# Start the FastAPI server (backend simple sans Pipecat)
+echo "🚀 Starting Backend API..."
 echo "   Host: $HOST"
 echo "   Port: $PORT"
 echo ""
-echo "📋 Configure Twilio webhook to point to:"
-echo "   POST http://your-public-url/incoming-call"
+echo "📋 Configure ElevenLabs webhook to point to:"
+echo "   POST https://your-ngrok-url/webhook/elevenlabs"
 echo ""
 
-exec python backend/server.py
+exec python backend/simple_server.py

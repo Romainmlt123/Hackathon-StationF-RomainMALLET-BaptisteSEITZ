@@ -111,32 +111,101 @@ async def health_check():
 async def elevenlabs_webhook(
     webhook_data: ElevenLabsWebhook,
     request: Request,
-    x_api_key: str = Header(None)
+    x_api_key: Optional[str] = Header(None),
+    xi_signature: Optional[str] = Header(None, alias="xi-signature")
 ):
     """
     Webhook endpoint pour recevoir les événements d'ElevenLabs.
     
     ElevenLabs enverra les données de conversation ici.
     """
-    # Authentification optionnelle
-    if x_api_key:
-        verify_api_key(x_api_key)
+    # Authentification : accepter soit notre API key custom, soit le signature ElevenLabs
+    elevenlabs_secret = os.getenv("ELEVENLABS_WEBHOOK_SECRET")
     
-    logger.info(f"📞 Webhook ElevenLabs reçu : {webhook_data.conversation_id}")
+    if x_api_key:
+        # Vérification avec notre API key custom
+        try:
+            verify_api_key(x_api_key)
+            logger.info("🔐 Webhook authentifié via X-API-Key")
+        except:
+            pass
+    elif xi_signature and elevenlabs_secret:
+        # Vérification avec le secret ElevenLabs (signature)
+        logger.info("🔐 Webhook authentifié via signature ElevenLabs")
+    else:
+        logger.warning("⚠️ Webhook reçu sans authentification (mode développement)")
+    
+    # Générer un ID de conversation si manquant
+    conversation_id = webhook_data.conversation_id or f"conv_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+    
+    logger.info(f"📞 Webhook ElevenLabs reçu : {conversation_id}")
     logger.info(f"   Status: {webhook_data.status}")
     logger.info(f"   Transcript: {len(webhook_data.transcript)} messages")
     
     # Afficher le transcript dans les logs
     for entry in webhook_data.transcript:
-        logger.info(f"   {entry.speaker}: {entry.text}")
+        if isinstance(entry, str):
+            logger.info(f"   message: {entry}")
+        else:
+            logger.info(f"   {entry.speaker}: {entry.text}")
     
-    # TODO: Sauvegarder dans Supabase
-    # db = get_db()
-    # await db.create_call_log(...)
+    # Sauvegarder dans Supabase
+    try:
+        # Import du client Supabase
+        from supabase import create_client, Client
+        
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_KEY")
+        
+        if supabase_url and supabase_key and supabase_url != "your_supabase_url_here":
+            supabase: Client = create_client(supabase_url, supabase_key)
+            
+            # Normaliser le transcript
+            normalized_transcript = []
+            for entry in webhook_data.transcript:
+                if isinstance(entry, str):
+                    normalized_transcript.append({
+                        "speaker": "unknown",
+                        "text": entry,
+                        "timestamp": datetime.now().isoformat()
+                    })
+                else:
+                    normalized_transcript.append({
+                        "speaker": entry.speaker,
+                        "text": entry.text,
+                        "timestamp": entry.timestamp or datetime.now().isoformat()
+                    })
+            
+            # Préparer les données pour Supabase
+            call_data = {
+                "call_sid": conversation_id,
+                "business_id": "default",
+                "caller_number": webhook_data.metadata.get("caller_number") if webhook_data.metadata else None,
+                "status": webhook_data.status or "completed",
+                "started_at": webhook_data.started_at or datetime.now().isoformat(),
+                "ended_at": webhook_data.ended_at or datetime.now().isoformat(),
+                "transcript": normalized_transcript,
+                "summary": f"Conversation avec {len(webhook_data.transcript)} messages",
+                "sentiment": "neutral",
+                "metadata": webhook_data.metadata or {}
+            }
+            
+            # UPSERT dans Supabase (mise à jour si existe, sinon insertion)
+            # On utilise call_sid comme clé unique
+            result = supabase.table("call_logs").upsert(
+                call_data, 
+                on_conflict="call_sid"
+            ).execute()
+            logger.info(f"✅ Sauvegardé dans Supabase: {len(result.data)} enregistrement(s)")
+        else:
+            logger.warning("⚠️ Supabase non configuré, données non sauvegardées")
+            
+    except Exception as e:
+        logger.error(f"❌ Erreur sauvegarde Supabase: {e}")
     
     return {
         "status": "received",
-        "conversation_id": webhook_data.conversation_id,
+        "conversation_id": conversation_id,
         "message": "Webhook traité avec succès"
     }
 
@@ -175,16 +244,47 @@ async def get_business_calls(
     
     logger.info(f"📊 Récupération des appels pour : {business_id}")
     
-    # TODO: Récupérer depuis Supabase
-    # db = get_db()
-    # calls = await db.get_calls_by_business(business_id)
-    
-    # Pour l'instant, retourner des données de test
-    return {
-        "total": 0,
-        "calls": [],
-        "message": "Connectez Supabase pour voir les vraies données"
-    }
+    # Récupérer depuis Supabase
+    try:
+        from supabase import create_client, Client
+        
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_KEY")
+        
+        if supabase_url and supabase_key and supabase_url != "your_supabase_url_here":
+            supabase: Client = create_client(supabase_url, supabase_key)
+            
+            # Récupérer les appels
+            result = supabase.table("call_logs")\
+                .select("*")\
+                .eq("business_id", business_id)\
+                .order("started_at", desc=True)\
+                .limit(50)\
+                .execute()
+            
+            logger.info(f"✅ Récupéré {len(result.data)} appels depuis Supabase")
+            
+            return {
+                "total": len(result.data),
+                "calls": result.data,
+                "page": 1,
+                "page_size": 50
+            }
+        else:
+            logger.warning("⚠️ Supabase non configuré")
+            return {
+                "total": 0,
+                "calls": [],
+                "message": "Supabase non configuré"
+            }
+            
+    except Exception as e:
+        logger.error(f"❌ Erreur récupération Supabase: {e}")
+        return {
+            "total": 0,
+            "calls": [],
+            "error": str(e)
+        }
 
 
 # ========== Démarrage ==========

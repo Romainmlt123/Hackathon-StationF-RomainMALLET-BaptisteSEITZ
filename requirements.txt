@@ -1,22 +1,18 @@
 # ========================================
-# HACKATHON STATION F - REALTIME VOICE AGENT
-# Python dependencies
+# HACKATHON STATION F - Backend API
+# Python dependencies (sans Pipecat)
 # ========================================
 
-# Core Pipecat framework
-pipecat-ai[daily,deepgram,elevenlabs,mistral,silero]
-
-# Additional dependencies
-python-dotenv>=1.0
-loguru>=0.7.0
-pydantic>=2.0
-pydantic-settings>=2.0
-
-# Web framework (if using custom FastAPI endpoints)
+# Web framework
 fastapi>=0.110
 uvicorn[standard]>=0.27
 
-# HTTP client for backend integration
+# Utilitaires
+python-dotenv>=1.0
+loguru>=0.7.0
+pydantic>=2.0
+
+# HTTP client
 httpx>=0.27
 
 # Supabase client

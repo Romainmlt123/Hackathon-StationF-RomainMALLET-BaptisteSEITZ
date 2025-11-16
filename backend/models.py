@@ -23,11 +23,25 @@ class Sentiment(str, Enum):
     negative = "negative"
 
 
+from pydantic import BaseModel, Field
+from typing import List, Optional, Dict, Any, Union
+from datetime import datetime
+
 class TranscriptEntry(BaseModel):
-    """Single message in a conversation transcript."""
-    speaker: str = Field(..., description="'user' or 'assistant'")
-    text: str = Field(..., description="Transcribed or generated text")
-    timestamp: datetime = Field(..., description="When this was said")
+    """Entrée de transcription"""
+    speaker: str = Field(..., description="Locuteur (user, assistant, agent)")
+    text: str = Field(..., description="Texte dit")
+    timestamp: Optional[str] = Field(None, description="Horodatage ISO 8601")
+
+class ElevenLabsWebhook(BaseModel):
+    """Données reçues du webhook ElevenLabs - tous les champs optionnels sauf transcript"""
+    conversation_id: Optional[str] = Field(None, description="ID unique de la conversation")
+    agent_id: Optional[str] = Field(None, description="ID de l'agent")
+    status: Optional[str] = Field("completed", description="Statut de l'appel")
+    started_at: Optional[str] = Field(None, description="Début de l'appel")
+    ended_at: Optional[str] = Field(None, description="Fin de l'appel")
+    transcript: Union[List[TranscriptEntry], List[str]] = Field(default_factory=list, description="Transcription")
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Métadonnées")
 
 
 class CallLogCreate(BaseModel):
