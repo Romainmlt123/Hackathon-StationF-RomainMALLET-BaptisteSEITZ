@@ -72,11 +72,11 @@ app.add_middleware(
 
 # ========== Helper pour authentification ==========
 
-def verify_api_key(x_api_key: str = Header(...)) -> bool:
-    """Vérifie la clé API"""
+def verify_api_key(x_api_key: Optional[str] = Header(None, alias="X-API-Key")) -> bool:
+    """Vérifie la clé API - accepte X-API-Key ou x-api-key"""
     expected_key = os.getenv("API_KEY", "hSar6wEenqfJGb_RwrfDu3b5S1VWBqSpxj5xWCnR9KY")
     
-    if x_api_key != expected_key:
+    if not x_api_key or x_api_key != expected_key:
         raise HTTPException(status_code=401, detail="Invalid API key")
     
     return True
@@ -230,6 +230,145 @@ async def log_call_manual(
         "status": "logged",
         "data": body
     }
+
+
+@app.post("/api/company-profile/sync")
+async def sync_company_profile(
+    request: Request,
+    x_api_key: str = Header(...)
+):
+    """
+    Synchronise les informations du Company Profile avec l'agent ElevenLabs.
+    Le frontend appellera cet endpoint quand l'utilisateur sauvegarde son profil.
+    """
+    verify_api_key(x_api_key)
+    
+    try:
+        company_profile = await request.json()
+        logger.info(f"🏢 Synchronisation du profil pour : {company_profile.get('company_name', 'N/A')}")
+        
+        # Importer le module de configuration ElevenLabs
+        from elevenlabs_config import sync_company_profile_to_agent
+        
+        # Synchroniser avec l'agent
+        success = sync_company_profile_to_agent(company_profile)
+        
+        if success:
+            return {
+                "status": "success",
+                "message": f"Agent configuré pour {company_profile.get('company_name', 'votre entreprise')}",
+                "agent_id": os.getenv("ELEVENLABS_AGENT_ID")
+            }
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail="Échec de la synchronisation avec l'agent ElevenLabs"
+            )
+            
+    except Exception as e:
+        logger.error(f"❌ Erreur sync profil : {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/dynamic-variables/configure")
+async def configure_dynamic_variables(
+    request: Request,
+    x_api_key: str = Header(...)
+):
+    """
+    Configure les variables dynamiques dans le prompt de l'agent.
+    
+    Body exemple:
+    {
+        "industry": "restaurant",  // ou "hotel", "ecommerce", "custom"
+        "custom_variables": {      // optionnel si industry != "custom"
+            "ma_variable": "Description de la variable"
+        }
+    }
+    """
+    verify_api_key(x_api_key)
+    
+    try:
+        data = await request.json()
+        industry = data.get("industry", "custom")
+        custom_vars = data.get("custom_variables", {})
+        
+        logger.info(f"⚙️  Configuration des variables dynamiques pour : {industry}")
+        
+        from dynamic_variables import (
+            configure_restaurant_variables,
+            configure_hotel_variables,
+            configure_ecommerce_variables,
+            DynamicVariablesManager
+        )
+        
+        # Configurer selon l'industrie
+        if industry == "restaurant":
+            success = configure_restaurant_variables()
+        elif industry == "hotel":
+            success = configure_hotel_variables()
+        elif industry == "ecommerce":
+            success = configure_ecommerce_variables()
+        elif industry == "custom" and custom_vars:
+            manager = DynamicVariablesManager()
+            success = manager.configure_dynamic_variables(custom_vars)
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Industry non supportée ou custom_variables manquantes"
+            )
+        
+        if success:
+            return {
+                "status": "success",
+                "message": f"Variables dynamiques configurées pour {industry}",
+                "industry": industry
+            }
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail="Échec de la configuration des variables dynamiques"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Erreur config variables : {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/dynamic-variables/values")
+async def get_dynamic_variables_values(
+    x_api_key: str = Header(...),
+    caller_number: Optional[str] = None
+):
+    """
+    Récupère les valeurs actuelles des variables dynamiques.
+    Peut être appelé avant chaque appel pour obtenir les données fraîches.
+    
+    Query params:
+    - caller_number: Numéro du caller pour personnalisation (optionnel)
+    """
+    verify_api_key(x_api_key)
+    
+    try:
+        from dynamic_variables import DynamicVariablesManager
+        
+        manager = DynamicVariablesManager()
+        variables = manager.get_variables_for_call(
+            caller_number=caller_number,
+            enabled_variables=None  # Toutes les variables
+        )
+        
+        return {
+            "status": "success",
+            "variables": variables,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"❌ Erreur récupération variables : {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/calls/{business_id}")

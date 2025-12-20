@@ -98,9 +98,14 @@ def format_conversation(conv_details):
             time_offset = msg.get("time_in_call_secs", 0)
             timestamp = datetime.fromtimestamp(start_time + time_offset).isoformat() if start_time else datetime.now().isoformat()
             
+            # S'assurer que text n'est jamais None/null
+            message_text = msg.get("message")
+            if message_text is None:
+                message_text = ""
+            
             transcript.append({
                 "speaker": msg.get("role", "unknown"),  # "agent" ou "user"
-                "text": msg.get("message", ""),
+                "text": str(message_text),  # Convertir explicitement en string
                 "timestamp": timestamp
             })
     
